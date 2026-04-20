@@ -1,10 +1,10 @@
 # Program 4 - Nim (Client/Server)
 
 ## Team Members
-- Name 1
-- Name 2
-- Name 3
-- Name 4
+- Jackson Bennett
+- Davis Burt
+- Riley Hupp
+- Stephen Smith
 
 ## Project Overview
 This project is a networked version of the game Nim.
