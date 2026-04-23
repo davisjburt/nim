@@ -57,3 +57,8 @@ Add any special setup or run instructions here.
 - Team member responsibilities included
 - Known bugs listed
 - Team evaluation form completed
+
+
+## Test networking portion:
+
+- use command: cl.exe /EHsc network.cpp
