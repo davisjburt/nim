@@ -36,7 +36,7 @@ It uses C++ and the Winsock2 library to allow two players to play over UDP.
 ## Team Responsibilities
 - Name 1 - Networking / sockets
 - Name 2 - Negotiation / lobby flow
-- Name 3 - Game logic / validation
+- Stephen Smith - Game logic / validation
 - Name 4 - UI / testing / documentation
 
 ## Known Bugs
