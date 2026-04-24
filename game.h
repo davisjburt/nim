@@ -15,9 +15,10 @@ class Nim
 
     public:
     Nim(const std::string& gamestate);
-
     void printGame();
     bool isGameOver();
+    bool tryMove(int pile, int amt);
+
 };
 
 #endif
