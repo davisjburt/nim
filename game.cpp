@@ -33,8 +33,8 @@ Nim::Nim(const std::string& gamestate)
 }
 
 void Nim::printGame(){
-    for (int i = 0; i < piles.size(); ++i){
-        if (i == piles.size() - 1) {
+    for (int i = 0; i < (int)piles.size(); ++i){
+        if (i == (int)piles.size() - 1) {
             std::cout << piles[i];
         }
         else {
@@ -53,7 +53,7 @@ bool Nim::isGameOver()
 }
 
 bool Nim::tryMove(int pile, int amt) {
-    if (pile < 1 || pile > piles.size()) return false;
+    if (pile < 1 || pile > (int)piles.size()) return false;
     if (amt < 1 || amt > piles[pile - 1]) return false;
 
     piles[pile - 1] -= amt;
@@ -72,7 +72,7 @@ bool Nim::decodeMove(const std::string msg, int& pile, int& amt){
     pile = msg.at(0) - '0';
     amt = (msg.at(1) - '0') * 10 + (msg.at(2) - '0');
 
-    if (pile < 1 || pile > piles.size()) return false;
+    if (pile < 1 || pile > (int)piles.size()) return false;
     if (amt < 1 || amt > piles[pile - 1]) return false;
 
     return true;

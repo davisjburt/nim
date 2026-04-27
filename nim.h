@@ -1,4 +1,6 @@
 #pragma once
+#ifndef NIM_H
+#define NIM_H
 #include <winsock2.h>
 
 #define MAX_NAME        81   //<= 80 chars + null
@@ -25,6 +27,10 @@ struct ServerEntry {
 
 
 int  wait(SOCKET s, int seconds, int msec);
-int  getServers(SOCKET s, ServerEntry servers[]);      
-sockaddr_in GetBroadcastAddress(char* ip, char* mask);
-sockaddr_in GetBroadcastAddressAlternate(char* ip);
+int  getServers(SOCKET s, ServerEntry servers[]);
+
+int  getChoice(int low, int high);
+void hostMode(const char myName[]);
+bool clientMode(const char myName[]);
+
+#endif // NIM_H

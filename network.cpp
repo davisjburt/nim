@@ -5,6 +5,7 @@
 #include <WinSock2.h>
 #include <ws2tcpip.h>
 #include "nim.h"
+#include "game.h"
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -21,11 +22,6 @@ using namespace std;
 // const char NIM_YES[] = "YES";
 // const char NIM_NO[] = "NO";
 // const char NIM_GREAT[] = "GREAT!";
-
-struct HostInfo {
-    sockaddr_in addr;
-    char name[MAX_NAME];
-};
 
 bool sameTextIgnoreCase(const char a[], const char b[]) {
     int i = 0;
@@ -62,6 +58,7 @@ void printAddress(sockaddr_in addr) {
     cout << ip << ":" << ntohs(addr.sin_port);
 }
 
+
 int getChoice(int low, int high) {
     string line;
     int choice;
@@ -74,14 +71,14 @@ int getChoice(int low, int high) {
     }
 }
 
-int waitForSocket(SOCKET s, int seconds) {
+int wait(SOCKET s, int seconds, int msec) {
     fd_set set;
     FD_ZERO(&set);
     FD_SET(s, &set);
 
     timeval tv;
     tv.tv_sec = seconds;
-    tv.tv_usec = 0;
+    tv.tv_usec = msec * 1000;
 
     return select(0, &set, nullptr, nullptr, &tv);
 }
@@ -94,10 +91,10 @@ bool sendMessage(SOCKET s, const sockaddr_in& addr, const char msg[]) {
 
 bool receiveMessage(SOCKET s, char buf[], int bufSize,
                     sockaddr_in& fromAddr, int timeoutSeconds) {
-    int ready = waitForSocket(s, timeoutSeconds);
+    int ready = wait(s, timeoutSeconds, 0);
     if (ready <= 0) return false;
 
-    int fromSize = sizeof(fromAddr);
+    int fromSize = (int)sizeof(fromAddr);
     int len = recvfrom(s, buf, bufSize - 1, 0,
         (sockaddr*)&fromAddr, &fromSize);
 
@@ -106,7 +103,7 @@ bool receiveMessage(SOCKET s, char buf[], int bufSize,
     return true;
 }
 
-int discoverHosts(SOCKET s, HostInfo hosts[]) {
+int getServers(SOCKET s, ServerEntry servers[]) {
     BOOL canBroadcast = TRUE;
     setsockopt(s, SOL_SOCKET, SO_BROADCAST, (char*)&canBroadcast, sizeof(canBroadcast));
 
@@ -127,21 +124,148 @@ int discoverHosts(SOCKET s, HostInfo hosts[]) {
         if (startsWithIgnoreCase(buf, NIM_NAME_PFX)) {
             bool alreadySeen = false;
             for (int i = 0; i < count; i++) {
-                if (sameServer(hosts[i].addr, from)) {
+                if (sameServer(servers[i].addr, from)) {
                     alreadySeen = true;
                     break;
                 }
             }
 
             if (!alreadySeen && count < MAX_SERVERS) {
-                hosts[count].addr = from;
-                strcpy_s(hosts[count].name, MAX_NAME, buf + strlen(NIM_NAME_PFX));
+                servers[count].addr = from;
+                strcpy_s(servers[count].name, MAX_NAME, buf + strlen(NIM_NAME_PFX));
                 count++;
             }
         }
     }
 
     return count;
+}
+
+static bool validateBoard(const char* s) {
+    if (!s || !isdigit((unsigned char)s[0])) return false;
+    int n = s[0] - '0';
+    if (n < 3 || n > 9) return false;
+    if ((int)strlen(s) != 1 + n * 2) return false;
+    for (int i = 0; i < n; i++) {
+        char c1 = s[1 + i * 2], c2 = s[2 + i * 2];
+        if (!isdigit((unsigned char)c1) || !isdigit((unsigned char)c2)) return false;
+        int rocks = (c1 - '0') * 10 + (c2 - '0');
+        if (rocks < 1 || rocks > 20) return false;
+    }
+    return true;
+}
+
+static string buildBoardString() {
+    cout << "Enter board string. Example: 3030405  =  3 piles with 3, 4, and 5 rocks" << endl;
+    string board;
+    while (true) {
+        cout << "> ";
+        getline(cin, board);
+        if (validateBoard(board.c_str())) break;
+        cout << "Invalid. Must be 3-9 piles, each pile 01-20 rocks. Try again." << endl;
+    }
+    return board;
+}
+
+void playGame(SOCKET s, sockaddr_in opponent, bool isClient) {
+    char buf[DEFAULT_BUFLEN];
+    string boardStr;
+
+    if (!isClient) {
+        boardStr = buildBoardString();
+        sendMessage(s, opponent, boardStr.c_str());
+    } else {
+        sockaddr_in from{};
+        if (!receiveMessage(s, buf, DEFAULT_BUFLEN, from, 30)) {
+            cout << "No board received in time. You win by default!" << endl;
+            return;
+        }
+        if (!validateBoard(buf)) {
+            cout << "Invalid board received. You win by default!" << endl;
+            return;
+        }
+        boardStr = buf;
+    }
+
+    Nim game(boardStr);
+    cout << "\n--- Board ---" << endl;
+    game.printGame();
+
+    bool myTurn = isClient;
+
+    while (true) {
+        if (myTurn) {
+            while (true) {
+                cout << "\nYour turn - enter move (e.g. 305 = pile 3, remove 5), [C]hat, or [F]orfeit: ";
+                string line;
+                getline(cin, line);
+                if (line.empty()) continue;
+                char first = toupper((unsigned char)line[0]);
+
+                if (first == 'F') {
+                    sendMessage(s, opponent, "F");
+                    cout << "You forfeited. Game over." << endl;
+                    return;
+                } else if (first == 'C') {
+                    cout << "Message: ";
+                    string chat;
+                    getline(cin, chat);
+                    string dg = string(1, NIM_CHAT_FLAG) + chat;
+                    sendMessage(s, opponent, dg.c_str());
+                } else if (first >= '1' && first <= '9') {
+                    int pile = 0, amt = 0;
+                    if (!game.decodeMove(line, pile, amt)) {
+                        cout << "Invalid move. Format: pile(1-9) + rocks(01-20), e.g. 305. Try again." << endl;
+                        continue;
+                    }
+                    game.tryMove(pile, amt);
+                    sendMessage(s, opponent, line.c_str());
+                    game.printGame();
+                    if (game.isGameOver()) {
+                        cout << "You removed the last rock. You win!" << endl;
+                        return;
+                    }
+                    break;
+                } else {
+                    cout << "Enter a move code (e.g. 305), C, or F." << endl;
+                }
+            }
+            myTurn = false;
+        } else {
+            while (true) {
+                sockaddr_in from{};
+                if (!receiveMessage(s, buf, DEFAULT_BUFLEN, from, 30)) {
+                    cout << "Opponent timed out. You win by default!" << endl;
+                    return;
+                }
+                if (!sameServer(from, opponent)) continue;
+
+                int pile = 0, amt = 0;
+                if (!game.verifyAction(string(buf), pile, amt)) {
+                    cout << "Opponent sent invalid move. You win by default!" << endl;
+                    return;
+                }
+
+                char fc = buf[0];
+                if (fc == NIM_CHAT_FLAG) {
+                    cout << "Opponent: " << (buf + 1) << endl;
+                } else if (fc == NIM_FORFEIT) {
+                    cout << "Opponent forfeited. You win!" << endl;
+                    return;
+                } else {
+                    game.tryMove(pile, amt);
+                    cout << "Opponent: pile " << pile << ", removed " << amt << endl;
+                    game.printGame();
+                    if (game.isGameOver()) {
+                        cout << "Opponent removed the last rock. You lose." << endl;
+                        return;
+                    }
+                    break;
+                }
+            }
+            myTurn = true;
+        }
+    }
 }
 
 void hostMode(const char myName[]) {
@@ -151,13 +275,16 @@ void hostMode(const char myName[]) {
         return;
     }
 
+    BOOL reuse = TRUE;
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (char*)&reuse, sizeof(reuse));
+
     sockaddr_in myAddr{};
     myAddr.sin_family = AF_INET;
     myAddr.sin_port = htons(NIM_PORT);
     myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(s, (sockaddr*)&myAddr, sizeof(myAddr)) == SOCKET_ERROR) {
-        cout << "bind() failed" << endl;
+        cout << "bind() failed: error " << WSAGetLastError() << endl;
         closesocket(s);
         return;
     }
@@ -165,6 +292,7 @@ void hostMode(const char myName[]) {
     cout << "Hosting on port " << NIM_PORT << endl;
 
     char buf[DEFAULT_BUFLEN];
+    sockaddr_in clientAddr{};
 
     while (true) {
         sockaddr_in from{};
@@ -203,6 +331,7 @@ void hostMode(const char myName[]) {
                     sameServer(from, again) &&
                     sameTextIgnoreCase(reply, NIM_GREAT)) {
                     cout << "Handshake complete. Game can start." << endl;
+                    clientAddr = from;
                     break;
                 }
                 else {
@@ -215,6 +344,7 @@ void hostMode(const char myName[]) {
         }
     }
 
+    playGame(s, clientAddr, false);
     closesocket(s);
 }
 
@@ -225,8 +355,8 @@ bool clientMode(const char myName[]) {
         return false;
     }
 
-    HostInfo hosts[MAX_SERVERS]{};
-    int count = discoverHosts(s, hosts);
+    ServerEntry servers[MAX_SERVERS]{};
+    int count = getServers(s, servers);
 
     if (count <= 0) {
         cout << "No hosts found." << endl;
@@ -236,8 +366,8 @@ bool clientMode(const char myName[]) {
 
     cout << "Available hosts:" << endl;
     for (int i = 0; i < count; i++) {
-        cout << i + 1 << ". " << hosts[i].name << " (";
-        printAddress(hosts[i].addr);
+        cout << i + 1 << ". " << servers[i].name << " (";
+        printAddress(servers[i].addr);
         cout << ")" << endl;
     }
 
@@ -249,15 +379,15 @@ bool clientMode(const char myName[]) {
     strcat_s(msg, DEFAULT_BUFLEN, myName);
 
     cout << "[SEND -> ";
-    printAddress(hosts[picked].addr);
+    printAddress(servers[picked].addr);
     cout << "] " << msg << endl;
-    sendMessage(s, hosts[picked].addr, msg);
+    sendMessage(s, servers[picked].addr, msg);
 
     char reply[DEFAULT_BUFLEN];
     sockaddr_in from{};
     bool gotReply = receiveMessage(s, reply, DEFAULT_BUFLEN, from, 10);
 
-    if (!gotReply || !sameServer(from, hosts[picked].addr)) {
+    if (!gotReply || !sameServer(from, servers[picked].addr)) {
         cout << "No valid reply. Treat as NO." << endl;
         closesocket(s);
         return false;
@@ -268,8 +398,9 @@ bool clientMode(const char myName[]) {
     cout << "] " << reply << endl;
 
     if (sameTextIgnoreCase(reply, NIM_YES)) {
-        sendMessage(s, hosts[picked].addr, NIM_GREAT);
+        sendMessage(s, servers[picked].addr, NIM_GREAT);
         cout << "Handshake complete. Game can start." << endl;
+        playGame(s, servers[picked].addr, true);
         closesocket(s);
         return true;
     }
@@ -277,34 +408,4 @@ bool clientMode(const char myName[]) {
     cout << "Challenge refused." << endl;
     closesocket(s);
     return false;
-}
-
-int main() {
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        cout << "WSAStartup failed" << endl;
-        return 1;
-    }
-
-    char myName[MAX_NAME] = "";
-    cout << "Enter your name: ";
-    cin.getline(myName, MAX_NAME);
-
-    if (strlen(myName) == 0) {
-        strcpy_s(myName, MAX_NAME, "Player");
-    }
-
-    cout << "1. Host a game" << endl;
-    cout << "2. Challenge a host" << endl;
-    int choice = getChoice(1, 2);
-
-    if (choice == 1) {
-        hostMode(myName);
-    }
-    else {
-        clientMode(myName);
-    }
-
-    WSACleanup();
-    return 0;
 }
