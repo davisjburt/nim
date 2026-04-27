@@ -4,22 +4,23 @@
 #include <cctype>
 #include <WinSock2.h>
 #include <ws2tcpip.h>
+#include "nim.h"
 
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
 
-const int NIM_PORT = 29333;
-const int MAX_BUF = 512;
-const int MAX_NAME = 81;
-const int MAX_SERVERS = 50;
+// const int NIM_PORT = 29333;
+// const int DEFAULT_BUFLEN = 512;
+// const int MAX_NAME = 81;
+// const int MAX_SERVERS = 50;
 
-const char MSG_WHO[] = "Who?";
-const char MSG_NAME[] = "Name=";
-const char MSG_PLAYER[] = "Player=";
-const char MSG_YES[] = "YES";
-const char MSG_NO[] = "NO";
-const char MSG_GREAT[] = "GREAT!";
+// const char NIM_QUERY[] = "Who?";
+// const char NIM_NAME_PFX[] = "Name=";
+// const char NIM_PLAYER_PFX[] = "Player=";
+// const char NIM_YES[] = "YES";
+// const char NIM_NO[] = "NO";
+// const char NIM_GREAT[] = "GREAT!";
 
 struct HostInfo {
     sockaddr_in addr;
@@ -114,16 +115,16 @@ int discoverHosts(SOCKET s, HostInfo hosts[]) {
     bcast.sin_port = htons(NIM_PORT);
     bcast.sin_addr.s_addr = INADDR_BROADCAST;
 
-    sendMessage(s, bcast, MSG_WHO);
+    sendMessage(s, bcast, NIM_QUERY);
 
     int count = 0;
-    char buf[MAX_BUF];
+    char buf[DEFAULT_BUFLEN];
 
     while (true) {
         sockaddr_in from{};
-        if (!receiveMessage(s, buf, MAX_BUF, from, 2)) break;
+        if (!receiveMessage(s, buf, DEFAULT_BUFLEN, from, 2)) break;
 
-        if (startsWithIgnoreCase(buf, MSG_NAME)) {
+        if (startsWithIgnoreCase(buf, NIM_NAME_PFX)) {
             bool alreadySeen = false;
             for (int i = 0; i < count; i++) {
                 if (sameServer(hosts[i].addr, from)) {
@@ -134,7 +135,7 @@ int discoverHosts(SOCKET s, HostInfo hosts[]) {
 
             if (!alreadySeen && count < MAX_SERVERS) {
                 hosts[count].addr = from;
-                strcpy_s(hosts[count].name, MAX_NAME, buf + strlen(MSG_NAME));
+                strcpy_s(hosts[count].name, MAX_NAME, buf + strlen(NIM_NAME_PFX));
                 count++;
             }
         }
@@ -163,11 +164,11 @@ void hostMode(const char myName[]) {
 
     cout << "Hosting on port " << NIM_PORT << endl;
 
-    char buf[MAX_BUF];
+    char buf[DEFAULT_BUFLEN];
 
     while (true) {
         sockaddr_in from{};
-        if (!receiveMessage(s, buf, MAX_BUF, from, 1)) {
+        if (!receiveMessage(s, buf, DEFAULT_BUFLEN, from, 1)) {
             continue;
         }
 
@@ -175,18 +176,18 @@ void hostMode(const char myName[]) {
         printAddress(from);
         cout << "] " << buf << endl;
 
-        if (sameTextIgnoreCase(buf, MSG_WHO)) {
-            char reply[MAX_BUF] = "";
-            strcpy_s(reply, MAX_BUF, MSG_NAME);
-            strcat_s(reply, MAX_BUF, myName);
+        if (sameTextIgnoreCase(buf, NIM_QUERY)) {
+            char reply[DEFAULT_BUFLEN] = "";
+            strcpy_s(reply, DEFAULT_BUFLEN, NIM_NAME_PFX);
+            strcat_s(reply, DEFAULT_BUFLEN, myName);
 
             cout << "[SEND -> ";
             printAddress(from);
             cout << "] " << reply << endl;
             sendMessage(s, from, reply);
         }
-        else if (startsWithIgnoreCase(buf, MSG_PLAYER)) {
-            const char* challenger = buf + strlen(MSG_PLAYER);
+        else if (startsWithIgnoreCase(buf, NIM_PLAYER_PFX)) {
+            const char* challenger = buf + strlen(NIM_PLAYER_PFX);
 
             cout << challenger << " wants to play Nim." << endl;
             cout << "1. Accept" << endl;
@@ -194,13 +195,13 @@ void hostMode(const char myName[]) {
             int choice = getChoice(1, 2);
 
             if (choice == 1) {
-                sendMessage(s, from, MSG_YES);
+                sendMessage(s, from, NIM_YES);
 
                 sockaddr_in again{};
-                char reply[MAX_BUF];
-                if (receiveMessage(s, reply, MAX_BUF, again, 2) &&
+                char reply[DEFAULT_BUFLEN];
+                if (receiveMessage(s, reply, DEFAULT_BUFLEN, again, 2) &&
                     sameServer(from, again) &&
-                    sameTextIgnoreCase(reply, MSG_GREAT)) {
+                    sameTextIgnoreCase(reply, NIM_GREAT)) {
                     cout << "Handshake complete. Game can start." << endl;
                     break;
                 }
@@ -209,7 +210,7 @@ void hostMode(const char myName[]) {
                 }
             }
             else {
-                sendMessage(s, from, MSG_NO);
+                sendMessage(s, from, NIM_NO);
             }
         }
     }
@@ -243,18 +244,18 @@ bool clientMode(const char myName[]) {
     cout << "Pick a host:" << endl;
     int picked = getChoice(1, count) - 1;
 
-    char msg[MAX_BUF] = "";
-    strcpy_s(msg, MAX_BUF, MSG_PLAYER);
-    strcat_s(msg, MAX_BUF, myName);
+    char msg[DEFAULT_BUFLEN] = "";
+    strcpy_s(msg, DEFAULT_BUFLEN, NIM_PLAYER_PFX);
+    strcat_s(msg, DEFAULT_BUFLEN, myName);
 
     cout << "[SEND -> ";
     printAddress(hosts[picked].addr);
     cout << "] " << msg << endl;
     sendMessage(s, hosts[picked].addr, msg);
 
-    char reply[MAX_BUF];
+    char reply[DEFAULT_BUFLEN];
     sockaddr_in from{};
-    bool gotReply = receiveMessage(s, reply, MAX_BUF, from, 10);
+    bool gotReply = receiveMessage(s, reply, DEFAULT_BUFLEN, from, 10);
 
     if (!gotReply || !sameServer(from, hosts[picked].addr)) {
         cout << "No valid reply. Treat as NO." << endl;
@@ -266,8 +267,8 @@ bool clientMode(const char myName[]) {
     printAddress(from);
     cout << "] " << reply << endl;
 
-    if (sameTextIgnoreCase(reply, MSG_YES)) {
-        sendMessage(s, hosts[picked].addr, MSG_GREAT);
+    if (sameTextIgnoreCase(reply, NIM_YES)) {
+        sendMessage(s, hosts[picked].addr, NIM_GREAT);
         cout << "Handshake complete. Game can start." << endl;
         closesocket(s);
         return true;
