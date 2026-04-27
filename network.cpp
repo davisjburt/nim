@@ -4,6 +4,7 @@
 #include <cctype>
 #include <WinSock2.h>
 #include <ws2tcpip.h>
+#include "game_session.h"
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -85,12 +86,14 @@ int waitForSocket(SOCKET s, int seconds) {
     return select(0, &set, nullptr, nullptr, &tv);
 }
 
+// Send one text message to a specific computer.
 bool sendMessage(SOCKET s, const sockaddr_in& addr, const char msg[]) {
     int sent = sendto(s, msg, (int)strlen(msg) + 1, 0,
         (sockaddr*)&addr, sizeof(addr));
     return sent != SOCKET_ERROR;
 }
 
+// Wait a little while for a message to arrive.
 bool receiveMessage(SOCKET s, char buf[], int bufSize,
                     sockaddr_in& fromAddr, int timeoutSeconds) {
     int ready = waitForSocket(s, timeoutSeconds);
@@ -105,6 +108,7 @@ bool receiveMessage(SOCKET s, char buf[], int bufSize,
     return true;
 }
 
+// Check that the board string has the right shape.
 int discoverHosts(SOCKET s, HostInfo hosts[]) {
     BOOL canBroadcast = TRUE;
     setsockopt(s, SOL_SOCKET, SO_BROADCAST, (char*)&canBroadcast, sizeof(canBroadcast));
@@ -143,11 +147,11 @@ int discoverHosts(SOCKET s, HostInfo hosts[]) {
     return count;
 }
 
-void hostMode(const char myName[]) {
+bool hostMode(const char myName[]) {
     SOCKET s = socket(AF_INET, SOCK_DGRAM, 0);
     if (s == INVALID_SOCKET) {
         cout << "socket() failed" << endl;
-        return;
+        return false;
     }
 
     sockaddr_in myAddr{};
@@ -158,12 +162,13 @@ void hostMode(const char myName[]) {
     if (bind(s, (sockaddr*)&myAddr, sizeof(myAddr)) == SOCKET_ERROR) {
         cout << "bind() failed" << endl;
         closesocket(s);
-        return;
+        return false;
     }
 
     cout << "Hosting on port " << NIM_PORT << endl;
 
     char buf[MAX_BUF];
+    bool gameStarted = false;
 
     while (true) {
         sockaddr_in from{};
@@ -202,6 +207,8 @@ void hostMode(const char myName[]) {
                     sameServer(from, again) &&
                     sameTextIgnoreCase(reply, MSG_GREAT)) {
                     cout << "Handshake complete. Game can start." << endl;
+                    runHostGameSession(s, from);
+                    gameStarted = true;
                     break;
                 }
                 else {
@@ -215,6 +222,7 @@ void hostMode(const char myName[]) {
     }
 
     closesocket(s);
+    return gameStarted;
 }
 
 bool clientMode(const char myName[]) {
@@ -268,7 +276,8 @@ bool clientMode(const char myName[]) {
 
     if (sameTextIgnoreCase(reply, MSG_YES)) {
         sendMessage(s, hosts[picked].addr, MSG_GREAT);
-        cout << "Handshake complete. Game can start." << endl;
+        cout << "Handshake successful" << endl;
+        runClientGameSession(s, hosts[picked].addr);
         closesocket(s);
         return true;
     }
@@ -295,13 +304,26 @@ int main() {
 
     cout << "1. Host a game" << endl;
     cout << "2. Challenge a host" << endl;
-    int choice = getChoice(1, 2);
+    cout << "3. Quit" << endl;
 
-    if (choice == 1) {
-        hostMode(myName);
-    }
-    else {
-        clientMode(myName);
+    while (true) {
+        int choice = getChoice(1, 3);
+        if (choice == 3) {
+            break;
+        }
+
+        if (choice == 1) {
+            // Host waits for a challenge and then starts the game.
+            hostMode(myName);
+        }
+        else {
+            // Client looks for hosts, picks one, and starts play after setup.
+            clientMode(myName);
+        }
+
+        cout << "1. Host a game" << endl;
+        cout << "2. Challenge a host" << endl;
+        cout << "3. Quit" << endl;
     }
 
     WSACleanup();
