@@ -18,7 +18,8 @@ class Nim
     void printGame();
     bool isGameOver();
     bool tryMove(int pile, int amt);
-
+    bool verifyAction(const std::string action, int& pile, int& amt);
+    bool decodeMove(const std::string msg, int& pile, int& amt);
 };
 
 #endif
