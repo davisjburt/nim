@@ -34,10 +34,10 @@ It uses C++ and the Winsock2 library to allow two players to play over UDP.
 - `ui.cpp` / `ui.h` - Menus, prompts, and display
 
 ## Team Responsibilities
-- Name 1 - Networking / sockets
+- Davis Burt - Networking / sockets
 - Riley Hupp - Negotiation / lobby flow
 - Stephen Smith - Game logic / validation
-- Name 4 - UI / testing / documentation
+- Jackson Bennett - UI / testing / documentation
 
 ## Known Bugs
 - None known at this time
