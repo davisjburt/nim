@@ -3,7 +3,7 @@
         {
             "type": "shell",
             "label": "C/C++: cl.exe build nim",
-            "command": "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvarsall.bat\" x64 && cl.exe /Zi /EHsc /nologo /Fe:nim.exe nim.cpp network.cpp game.cpp /link ws2_32.lib",
+            "command": "\"C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvarsall.bat\" x64 && cl.exe /Zi /EHsc /nologo /Fe:nim.exe nim.cpp network.cpp game.cpp ui.cpp /link ws2_32.lib",
             "options": {
                 "cwd": "${workspaceFolder}",
                 "shell": {

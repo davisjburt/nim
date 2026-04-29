@@ -36,7 +36,9 @@
   "C_Cpp_Runner.enableWarnings": true,
   "C_Cpp_Runner.warningsAsError": false,
   "C_Cpp_Runner.compilerArgs": [],
-  "C_Cpp_Runner.linkerArgs": ["-lws2_32"],
+  "C_Cpp_Runner.linkerArgs": [
+    "-lws2_32"
+  ],
   "C_Cpp_Runner.includePaths": [],
   "C_Cpp_Runner.includeSearch": [
     "*",
