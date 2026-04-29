@@ -132,7 +132,7 @@ int getServers(SOCKET s, ServerEntry servers[]) {
 static bool validateBoard(const char* s) {
     if (!s || !isdigit((unsigned char)s[0])) return false;
     int n = s[0] - '0';
-    if (n < 3 || n > 9) return false;
+    if (n < 1 || n > 9) return false;
     if ((int)strlen(s) != 1 + n * 2) return false;
     for (int i = 0; i < n; i++) {
         char c1 = s[1 + i * 2], c2 = s[2 + i * 2];
@@ -144,13 +144,56 @@ static bool validateBoard(const char* s) {
 }
 
 static string buildBoardString() {
-    cout << "Enter board string. Example: 3030405  =  3 piles with 3, 4, and 5 rocks" << endl;
+    cout << "Enter board string. Format: [piles][each pile as 2 digits]" << endl;
+    cout << "Example: 3030405  =  3 piles with 3, 4, and 5 rocks" << endl;
+
     string board;
     while (true) {
         cout << "> ";
         getline(cin, board);
-        if (validateBoard(board.c_str())) break;
-        cout << "Invalid. Must be 3-9 piles, each pile 01-20 rocks. Try again." << endl;
+        const char* s = board.c_str();
+
+        if (board.empty() || !isdigit((unsigned char)s[0])) {
+            cout << "The first character must be the number of piles (1-9), e.g. '3030405'." << endl;
+            continue;
+        }
+
+        int n = s[0] - '0';
+        if (n < 1 || n > 9) {
+            cout << "Number of piles must be 1-9, but you entered " << n << "." << endl;
+            continue;
+        }
+
+        int expected = 1 + n * 2;
+        int actual = (int)strlen(s);
+        if (actual < expected) {
+            int provided = (actual - 1) / 2;
+            cout << "You said " << n << " pile(s) but only provided " << provided
+                 << " pile size(s). Expected " << expected << " characters, got " << actual << "." << endl;
+            continue;
+        }
+        if (actual > expected) {
+            cout << "You said " << n << " pile(s) but the string is too long. Expected "
+                 << expected << " characters, got " << actual << "." << endl;
+            continue;
+        }
+
+        bool ok = true;
+        for (int i = 0; i < n; i++) {
+            char c1 = s[1 + i * 2], c2 = s[2 + i * 2];
+            if (!isdigit((unsigned char)c1) || !isdigit((unsigned char)c2)) {
+                cout << "Pile " << (i + 1) << " contains a non-numeric character." << endl;
+                ok = false;
+                break;
+            }
+            int rocks = (c1 - '0') * 10 + (c2 - '0');
+            if (rocks < 1 || rocks > 20) {
+                cout << "Pile " << (i + 1) << " has " << rocks << " rock(s). Each pile must have 1-20 rocks." << endl;
+                ok = false;
+                break;
+            }
+        }
+        if (ok) break;
     }
     return board;
 }
@@ -322,7 +365,7 @@ void hostMode(const char myName[]) {
                 if (receiveMessage(s, reply, DEFAULT_BUFLEN, again, 2) &&
                     sameServer(from, again) &&
                     sameTextIgnoreCase(reply, NIM_GREAT)) {
-                    cout << "Handshake complete. Game can start." << endl;
+                    cout << "Connection established! Starting game..." << endl;
                     clientAddr = from;
                     break;
                 }
@@ -391,7 +434,7 @@ bool clientMode(const char myName[]) {
 
     if (sameTextIgnoreCase(reply, NIM_YES)) {
         sendMessage(s, servers[picked].addr, NIM_GREAT);
-        cout << "Handshake complete. Game can start." << endl;
+        cout << "Connection established! Starting game..." << endl;
         playGame(s, servers[picked].addr, true);
         closesocket(s);
         return true;
