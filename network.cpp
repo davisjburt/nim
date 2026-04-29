@@ -6,22 +6,11 @@
 #include <ws2tcpip.h>
 #include "nim.h"
 #include "game.h"
+#include "ui.h"
 
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
-
-// const int NIM_PORT = 29333;
-// const int DEFAULT_BUFLEN = 512;
-// const int MAX_NAME = 81;
-// const int MAX_SERVERS = 50;
-
-// const char NIM_QUERY[] = "Who?";
-// const char NIM_NAME_PFX[] = "Name=";
-// const char NIM_PLAYER_PFX[] = "Player=";
-// const char NIM_YES[] = "YES";
-// const char NIM_NO[] = "NO";
-// const char NIM_GREAT[] = "GREAT!";
 
 bool sameTextIgnoreCase(const char a[], const char b[]) {
     int i = 0;
@@ -48,8 +37,8 @@ bool startsWithIgnoreCase(const char text[], const char front[]) {
 
 bool sameServer(sockaddr_in a, sockaddr_in b) {
     return a.sin_family == b.sin_family &&
-           a.sin_port == b.sin_port &&
-           a.sin_addr.s_addr == b.sin_addr.s_addr;
+        a.sin_port == b.sin_port &&
+        a.sin_addr.s_addr == b.sin_addr.s_addr;
 }
 
 void printAddress(sockaddr_in addr) {
@@ -57,7 +46,6 @@ void printAddress(sockaddr_in addr) {
     inet_ntop(AF_INET, (void*)&addr.sin_addr, ip, INET_ADDRSTRLEN);
     cout << ip << ":" << ntohs(addr.sin_port);
 }
-
 
 int getChoice(int low, int high) {
     string line;
@@ -90,7 +78,7 @@ bool sendMessage(SOCKET s, const sockaddr_in& addr, const char msg[]) {
 }
 
 bool receiveMessage(SOCKET s, char buf[], int bufSize,
-                    sockaddr_in& fromAddr, int timeoutSeconds) {
+    sockaddr_in& fromAddr, int timeoutSeconds) {
     int ready = wait(s, timeoutSeconds, 0);
     if (ready <= 0) return false;
 
@@ -174,90 +162,94 @@ void playGame(SOCKET s, sockaddr_in opponent, bool isClient) {
     if (!isClient) {
         boardStr = buildBoardString();
         sendMessage(s, opponent, boardStr.c_str());
-    } else {
+    }
+    else {
         sockaddr_in from{};
         if (!receiveMessage(s, buf, DEFAULT_BUFLEN, from, 30)) {
-            cout << "No board received in time. You win by default!" << endl;
+            uiShowMessage("No board received in time. You win by default!");
             return;
         }
         if (!validateBoard(buf)) {
-            cout << "Invalid board received. You win by default!" << endl;
+            uiShowMessage("Invalid board received. You win by default!");
             return;
         }
         boardStr = buf;
     }
 
     Nim game(boardStr);
-    cout << "\n--- Board ---" << endl;
-    game.printGame();
+    uiShowBoard(game);
 
     bool myTurn = isClient;
 
     while (true) {
         if (myTurn) {
+            uiShowTurn(true);
             while (true) {
-                cout << "\nYour turn - enter move (e.g. 305 = pile 3, remove 5), [C]hat, or [F]orfeit: ";
-                string line;
-                getline(cin, line);
+                string line = uiGetPlayerMove();
                 if (line.empty()) continue;
                 char first = toupper((unsigned char)line[0]);
 
                 if (first == 'F') {
                     sendMessage(s, opponent, "F");
-                    cout << "You forfeited. Game over." << endl;
+                    uiShowMessage("You forfeited. Game over.");
                     return;
-                } else if (first == 'C') {
-                    cout << "Message: ";
-                    string chat;
-                    getline(cin, chat);
+                }
+                else if (first == 'C') {
+                    string chat = uiGetChatMessage();
                     string dg = string(1, NIM_CHAT_FLAG) + chat;
                     sendMessage(s, opponent, dg.c_str());
-                } else if (first >= '1' && first <= '9') {
+                }
+                else if (first >= '1' && first <= '9') {
                     int pile = 0, amt = 0;
                     if (!game.decodeMove(line, pile, amt)) {
-                        cout << "Invalid move. Format: pile(1-9) + rocks(01-20), e.g. 305. Try again." << endl;
+                        uiShowMessage("Invalid move. Format: pile(1-9) + rocks(01-20), e.g. 305. Try again.");
                         continue;
                     }
                     game.tryMove(pile, amt);
                     sendMessage(s, opponent, line.c_str());
-                    game.printGame();
+                    uiShowBoard(game);
                     if (game.isGameOver()) {
-                        cout << "You removed the last rock. You win!" << endl;
+                        uiShowMessage("You removed the last rock. You win!");
                         return;
                     }
                     break;
-                } else {
-                    cout << "Enter a move code (e.g. 305), C, or F." << endl;
+                }
+                else {
+                    uiShowMessage("Enter a move code (e.g. 305), C, or F.");
                 }
             }
             myTurn = false;
-        } else {
+        }
+        else {
+            uiShowTurn(false);
             while (true) {
                 sockaddr_in from{};
                 if (!receiveMessage(s, buf, DEFAULT_BUFLEN, from, 30)) {
-                    cout << "Opponent timed out. You win by default!" << endl;
+                    uiShowMessage("Opponent timed out. You win by default!");
                     return;
                 }
                 if (!sameServer(from, opponent)) continue;
 
                 int pile = 0, amt = 0;
                 if (!game.verifyAction(string(buf), pile, amt)) {
-                    cout << "Opponent sent invalid move. You win by default!" << endl;
+                    uiShowMessage("Opponent sent invalid move. You win by default!");
                     return;
                 }
 
                 char fc = buf[0];
                 if (fc == NIM_CHAT_FLAG) {
-                    cout << "Opponent: " << (buf + 1) << endl;
-                } else if (fc == NIM_FORFEIT) {
-                    cout << "Opponent forfeited. You win!" << endl;
+                    uiShowMessage(string("Opponent: ") + (buf + 1));
+                }
+                else if (fc == NIM_FORFEIT) {
+                    uiShowMessage("Opponent forfeited. You win!");
                     return;
-                } else {
+                }
+                else {
                     game.tryMove(pile, amt);
-                    cout << "Opponent: pile " << pile << ", removed " << amt << endl;
-                    game.printGame();
+                    uiShowOpponentMove(pile, amt);
+                    uiShowBoard(game);
                     if (game.isGameOver()) {
-                        cout << "Opponent removed the last rock. You lose." << endl;
+                        uiShowMessage("Opponent removed the last rock. You lose.");
                         return;
                     }
                     break;

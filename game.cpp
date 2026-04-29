@@ -32,16 +32,16 @@ Nim::Nim(const std::string& gamestate)
     }
 }
 
-void Nim::printGame(){
-    for (int i = 0; i < (int)piles.size(); ++i){
-        if (i == (int)piles.size() - 1) {
-            std::cout << piles[i];
+void Nim::printGame() {
+    for (int i = 0; i < (int)piles.size(); ++i) {
+        std::cout << "[Pile " << i + 1 << "] : ";
+
+        for (int j = 0; j < piles[i]; ++j) {
+            std::cout << "#";
         }
-        else {
-            std::cout << piles[i] << " ";
-        }
+
+        std::cout << " (" << piles[i] << ")" << std::endl;
     }
-    std::cout << "\n";
 }
 
 bool Nim::isGameOver()

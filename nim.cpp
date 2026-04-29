@@ -5,6 +5,7 @@
 #include <string>
 #include "game.h"
 #include "nim.h"
+#include "ui.h"
 
 
 using namespace std;
@@ -26,10 +27,7 @@ int main() {
     }
 
     while (true) {
-        cout << "\n1. Host a game" << endl;
-        cout << "2. Challenge a host" << endl;
-        cout << "3. Quit" << endl;
-        int choice = getChoice(1, 3);
+        int choice = uiGetMainMenuChoice();
 
         if (choice == 1) {
             hostMode(myName);
